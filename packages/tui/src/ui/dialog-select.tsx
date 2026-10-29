@@ -665,7 +665,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       }}
       focusedBackgroundColor={theme.background.formfield.focused}
       cursorColor={newDesigns() ? theme.text.base : theme.text.formfield.focused}
-      cursorStyle={config.cursor}
+      cursorStyle={{ ...config.cursor }}
       focusedTextColor={newDesigns() ? theme.text.formfield.base : theme.text.formfield.focused}
       ref={(r) => {
         input = r
