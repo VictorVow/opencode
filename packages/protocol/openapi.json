@@ -15974,7 +15974,15 @@
               "properties": {
                 "action": {
                   "type": "string",
-                  "enum": ["provider.use", "tool.use", "integration.use"]
+                  "enum": [
+                    "provider.use",
+                    "tool.use",
+                    "integration.connect",
+                    "integration.use",
+                    "mcp.use",
+                    "skill.use",
+                    "plugin.use"
+                  ]
                 },
                 "resource": {
                   "type": "string"
@@ -16319,7 +16327,15 @@
                   "properties": {
                     "action": {
                       "type": "string",
-                      "enum": ["provider.use", "tool.use", "integration.use"]
+                      "enum": [
+                        "provider.use",
+                        "tool.use",
+                        "integration.connect",
+                        "integration.use",
+                        "mcp.use",
+                        "skill.use",
+                        "plugin.use"
+                      ]
                     },
                     "resource": {
                       "type": "string"

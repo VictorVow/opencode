@@ -202,17 +202,23 @@ export const layer = (options?: Options) =>
         if (entry.config.type !== "remote" || entry.config.oauth === false) return
         const remote = entry.config
         // Key identity on name + url, not url alone: two configs for the same url under different names are
-        // distinct logical servers that may hold different accounts, so they must not share a credential row.
-        const suffix =
-          "mcp_" +
-          createHash("sha1")
-            .update(name + "\u0000" + remote.url)
-            .digest("hex")
-            .slice(0, 16)
-        const integrationID = Integration.ID.make(suffix)
+        // distinct logical servers that may hold different accounts, so they must not share a credential row. The
+        // url also keeps a token from being sent to a different server configured under the same name.
+        const integrationID = Integration.ID.make(`mcp/${name}@${remote.url}`)
         entry.integrationID = integrationID
         owned.add(integrationID)
-        const methodID = Integration.MethodID.make(suffix)
+        const methodID = Integration.MethodID.make(integrationID)
+        // Before readable IDs, this server's credentials were stored under a hash of the same name and url.
+        yield* credentials.rekey(
+          Integration.ID.make(
+            "mcp_" +
+              createHash("sha1")
+                .update(name + "\u0000" + remote.url)
+                .digest("hex")
+                .slice(0, 16),
+          ),
+          integrationID,
+        )
         // Each registration gets its own child scope so disposal detaches it from the root scope
         // entirely; registering directly on root would accumulate a dead finalizer per replaced or
         // removed server for the lifetime of the layer.

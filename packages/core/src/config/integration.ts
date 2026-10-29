@@ -15,7 +15,7 @@ export const Policies = Schema.Array(Schema.Unknown).pipe(
     decode: SchemaGetter.transform((policies) =>
       policies.filter((policy) => {
         const action = Schema.decodeUnknownOption(Schema.Struct({ action: Schema.String }))(policy)
-        if (Option.isSome(action) && !Schema.is(ConfigPolicy.Info.fields.action)(action.value.action)) return false
+        if (Option.isSome(action) && !Schema.is(ConfigPolicy.Action)(action.value.action)) return false
         const effect = Schema.decodeUnknownOption(Schema.Struct({ effect: Schema.String }))(policy)
         return Option.isNone(effect) || Schema.is(ConfigPolicy.Effect)(effect.value.effect)
       }),
