@@ -18,6 +18,7 @@ import { ConfigNormalize } from "./config/normalize.js"
 import { ConfigDiscovery } from "./config/discovery.js"
 import { ConfigWatch } from "./config/watch.js"
 import { ConfigIntegration } from "./config/integration.js"
+import { ConfigManaged } from "./config/managed.js"
 import { ManagedPolicy } from "./managed-policy.js"
 import { Connection } from "@opencode/schema/connection"
 import { WellKnown } from "./wellknown.js"
@@ -197,7 +198,15 @@ export const layer = (options?: Options) =>
             env: variables,
           }).pipe(
             Effect.flatMap((text) => parseInfo(text, entry.origin)),
-            Effect.map((info) => (info ? new Document({ type: "document", info }) : undefined)),
+            Effect.map((info) =>
+              info
+                ? new ConfigIntegration.WellKnownDocument({
+                    type: "document",
+                    info,
+                    integrationID: entry.integrationID,
+                  })
+                : undefined,
+            ),
           ),
         ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
       })
@@ -301,7 +310,7 @@ export const layer = (options?: Options) =>
           .flatMap((entry) =>
             entry.type === "document" && entry.info.policies
               ? [
-                  new Document({
+                  new ConfigManaged.Document({
                     type: "document",
                     path: entry.path,
                     info: new Info({ policies: entry.info.policies }),
@@ -311,8 +320,8 @@ export const layer = (options?: Options) =>
           )
           .toReversed()
         const managedSettings = managed.map((entry) =>
-          entry.type === "document" && entry.info.policies
-            ? new Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
+          entry.type === "document"
+            ? new ConfigManaged.Document({ ...entry, info: new Info({ ...entry.info, policies: undefined }) })
             : entry,
         )
         // Integration documents load right after managed policies: every remote, user, and project layer overrides
@@ -342,7 +351,11 @@ export const layer = (options?: Options) =>
               allowed
                 ? entry.documents
                 : entry.documents.map(
-                    (document) => new Document({ ...document, info: new Info({ policies: document.info.policies }) }),
+                    (document) =>
+                      new ConfigIntegration.WellKnownDocument({
+                        ...document,
+                        info: new Info({ policies: document.info.policies }),
+                      }),
                   ),
             ),
           ),
