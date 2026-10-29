@@ -20,7 +20,7 @@ const statements = Effect.fnUntraced(function* () {
 })
 
 // `integration.connect` decides which integrations are listed and can be connected.
-const requireConnectable = Effect.fnUntraced(function* (integrationID: string) {
+export const requireConnectable = Effect.fnUntraced(function* (integrationID: string) {
   const denied = ManagedPolicy.match(yield* statements(), "integration.connect", integrationID)
   if (denied?.effect !== "deny") return
   return yield* new InvalidRequestError({

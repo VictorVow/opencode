@@ -64,6 +64,13 @@ it.live("integration policy filters /connect and blocks denied integrations and 
     const denied = yield* request("POST", "/api/integration/anthropic/connect/key", { key: "sk-test" })
     expect(denied.status).toBe(400)
     expect(denied.body).toMatchObject({ _tag: "InvalidRequestError", kind: "integration_policy" })
+    const credential = yield* request("POST", "/api/credential", {
+      integrationID: "anthropic",
+      value: { type: "key", key: "sk-test" },
+    })
+    expect(credential.status).toBe(400)
+    expect(credential.body).toMatchObject({ _tag: "InvalidRequestError", kind: "integration_policy" })
+    expect((yield* request("GET", "/api/credential")).body.data).toEqual([])
     const wellknown = yield* request("POST", "/api/experimental/integration/wellknown", { url: "https://ai.acme.com" })
     expect(wellknown.body).toMatchObject({ kind: "integration_policy" })
 
