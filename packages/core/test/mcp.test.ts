@@ -18,6 +18,7 @@ import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Config } from "@opencode/core/config"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
+import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
@@ -302,7 +303,7 @@ function resourceMcpLayer(
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
-    rekeyed?: [string, string][]
+    credentials?: Layer.Layer<Credential.Service>
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
@@ -386,10 +387,7 @@ function resourceMcpLayer(
             cancel: unusedIntegration,
           },
         }),
-        Layer.mock(Credential.Service, {
-          list: () => Effect.succeed([]),
-          rekey: (from, to) => Effect.sync(() => overrides?.rekeyed?.push([from, to]) !== undefined),
-        }),
+        overrides?.credentials ?? Layer.mock(Credential.Service, {}),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -2716,32 +2714,62 @@ it.effect("does not call MCP when permission is blocked", () =>
   }),
 )
 
-testEffect(Layer.empty).live("names OAuth MCP integrations readably and moves credentials from the hashed ID", () =>
-  Effect.gen(function* () {
-    const server = yield* resourceServer()
-    const rekeyed: [string, string][] = []
-    yield* Effect.gen(function* () {
-      const service = yield* Mcp.Service
-      yield* settled(service)
-      const readable = `mcp/resources@${server.url}`
-      expect((yield* service.servers()).map((item): string | undefined => item.integrationID)).toEqual([readable])
-      expect(rekeyed).toEqual([
-        [
+describe("MCP OAuth integration IDs", () => {
+  test("encode the server name so distinct name and url pairs never share an ID", () => {
+    // Unencoded, both pairs would read `mcp/github@https://trusted.example/@https://other.example/mcp`.
+    expect(Mcp.integrationIDFor("github", "https://trusted.example/@https://other.example/mcp")).not.toBe(
+      Mcp.integrationIDFor("github@https://trusted.example/", "https://other.example/mcp"),
+    )
+    expect(String(Mcp.integrationIDFor("github@https://trusted.example/", "https://other.example/mcp"))).toBe(
+      "mcp/github%40https://trusted.example/@https://other.example/mcp",
+    )
+    // `%` is encoded too, so a name that already looks encoded stays distinct.
+    expect(Mcp.integrationIDFor("a%40b", "https://x.example")).not.toBe(
+      Mcp.integrationIDFor("a@b", "https://x.example"),
+    )
+    expect(String(Mcp.integrationIDFor("github", "https://api.example.com/mcp"))).toBe("mcp/github@https://api.example.com/mcp")
+  })
+
+  testEffect(LayerNode.compile(LayerNode.group([Credential.node, Bus.node, Database.node]))).live(
+    "move a stored login from the hashed ID to the readable one",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const credentials = yield* Credential.Service
+        const legacy = Integration.ID.make(
           "mcp_" +
             createHash("sha1")
               .update("resources\u0000" + server.url)
               .digest("hex")
               .slice(0, 16),
-          readable,
-        ],
-      ])
-    }).pipe(
-      Effect.provide(
-        resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url }), undefined, undefined, { rekeyed }),
-      ),
-    )
-  }),
-)
+        )
+        const stored = yield* credentials.create({
+          integrationID: legacy,
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make(legacy),
+            access: "access",
+            refresh: "refresh",
+            expires: Number.MAX_SAFE_INTEGER,
+          }),
+        })
+        const readable = Mcp.integrationIDFor("resources", server.url)
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          expect((yield* service.servers()).map((item): string | undefined => item.integrationID)).toEqual([readable])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url }), undefined, undefined, {
+              credentials: Layer.succeed(Credential.Service, credentials),
+            }),
+          ),
+        )
+        expect(yield* credentials.list(legacy)).toEqual([])
+        expect((yield* credentials.list(readable)).map((credential) => credential.id)).toEqual([stored.id])
+      }),
+  )
+})
 
 for (const modern of [false, true]) {
   testEffect(Layer.empty).live(`integration policy denies MCP startup (${modern ? "modern" : "legacy"})`, () =>
