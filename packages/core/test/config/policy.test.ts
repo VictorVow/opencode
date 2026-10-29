@@ -345,6 +345,45 @@ describe("integration policy", () => {
     }),
   )
 
+  for (const effect of ["allow", "deny"] as const)
+    it.effect(`decides a well-known origin's providers by the origin: ${effect}`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        const origin = Integration.ID.make("https://ai.acme.com")
+        yield* catalog.transform((catalog) => {
+          catalog.update(Provider.ID.make("acme-gateway"), (provider) => {
+            provider.activation = "enabled"
+          })
+          catalog.update(Provider.ID.make("my-llm"), (provider) => {
+            provider.activation = "enabled"
+          })
+        })
+        yield* addPlugin([
+          document(
+            integration("integration.use", "deny", "*"),
+            integration("integration.use", effect, "https://ai.acme.com"),
+          ),
+          new ConfigIntegration.WellKnownDocument({
+            type: "document",
+            integrationID: origin,
+            info: decode({
+              providers: { "acme-gateway": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+            }),
+          }),
+          new Document({
+            type: "document",
+            info: decode({
+              providers: { "my-llm": { package: "@opencode/ai/providers/openai-compatible", models: {} } },
+            }),
+          }),
+        ])
+        expect(yield* catalog.get(Provider.ID.make("acme-gateway"))).toEqual(
+          effect === "allow" ? expect.anything() : undefined,
+        )
+        expect(yield* catalog.get(Provider.ID.make("my-llm"))).toBeUndefined()
+      }),
+    )
+
   it.effect("converts legacy statements in Console config before enforcement sees them", () =>
     Effect.sync(() => {
       const remote = Schema.decodeUnknownSync(ConfigIntegration.Remote)({

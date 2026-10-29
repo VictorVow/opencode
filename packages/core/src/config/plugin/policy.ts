@@ -9,6 +9,7 @@ import { ManagedPolicy } from "../../managed-policy.js"
 import { State } from "../../state.js"
 import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
+import { ConfigIntegration } from "../integration.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
@@ -54,11 +55,16 @@ export const Plugin = define({
     const runSync = Effect.runSyncWith(yield* Effect.context())
     yield* ctx.provider.transform((providers) => {
       const statements = policies()
+      // A provider a well-known origin defines belongs to that origin; others to their own integration.
+      const suppliers = ConfigIntegration.suppliers(loaded.entries)
       const denied: string[] = []
       for (const record of providers.list()) {
         const provider =
           ManagedPolicy.decision(statements, "provider.use", record.provider.id) === "deny" ||
-          integrationDenied(statements, record.provider.integrationID ?? record.provider.id)
+          integrationDenied(
+            statements,
+            suppliers.get(record.provider.id) ?? record.provider.integrationID ?? record.provider.id,
+          )
         if (!provider) continue
         providers.remove(record.provider.id)
         // Skip unconfigured catalog entries; deny-all policies would otherwise log the whole catalog.
